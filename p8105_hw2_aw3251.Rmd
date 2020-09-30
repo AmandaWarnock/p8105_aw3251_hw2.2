@@ -1,0 +1,220 @@
+---
+title: "Homework 2"
+output: github_document
+---
+
+```{r setup}
+library(tidyverse)
+library(readxl)
+```
+
+## Problem 1 
+
+Read the Mr. Trashweheel dataset. 
+
+```{r}
+trashwheel_df = 
+  read_xlsx(
+    "./data/Trashwheel.xlsx",
+    sheet = "Mr. Trash Wheel",
+    range = cell_cols("A:N")) %>% 
+  janitor::clean_names() %>% 
+  drop_na(dumpster) %>% 
+  mutate(
+    sports_balls = round(sports_balls),
+    sports_balls = as.integer(sports_balls)
+  ) 
+```
+
+Read precipitation data for 2018 and 2017!
+
+```{r}
+precip_2018 = 
+  read_excel(
+    "./data/Trashwheel.xlsx",
+    sheet = "2018 Precipitation",
+    skip = 1,
+  ) %>% 
+  janitor::clean_names() %>% 
+  drop_na(month) %>% 
+  mutate(year = 2018) %>% 
+  relocate(year)
+
+precip_2017 = 
+  read_excel(
+    "./data/Trashwheel.xlsx",
+    sheet = "2017 Precipitation",
+    skip = 1,
+  ) %>% 
+  janitor::clean_names() %>% 
+  drop_na(month) %>% 
+  mutate(year = 2017) %>% 
+  relocate(year)
+```
+
+Now combine annual precipitation. 
+
+```{r}
+month_df = 
+  tibble(
+    month = 1:12,
+    month_name = month.name
+  )
+
+precip_df = 
+  bind_rows(precip_2018, precip_2017) 
+
+left_join(precip_df, month_df, by = "month")
+```
+
+
+This dataset contains information from the Mr. Trashwheel Trash Collector in Baltimore, MD. As trash enters the inner harbor, the trashwheel collects that trash and stores it in a dumpster. The dataset contains information on year, month, and trash collected, including some specific kinds of trash. There are a total of `r nrow(trashwheel_df)` rows in our final dataset. Additional data sheets include monthly precipitation data. The median number of sports balls found in a dumpster in 2017 was `r trashwheel_df %>% filter(year == 2017) %>% pull(sports_balls) %>% median()`. The total precipitation in 2018 was `r precip_df %>% filter(year == 2018) %>% pull(total) %>% sum()` inches.
+
+
+## Problem 2
+
+Read the NYC Transit dataset. 
+
+```{r}
+transit_df = 
+  read_csv(
+    "./data/NYC_Transit_Subway_Entrance_And_Exit_Data.csv") %>% 
+  janitor::clean_names() %>% 
+  select(line:entry, vending, ada) %>% 
+  mutate(entry = recode(entry, YES = "TRUE", NO = "FALSE")) %>% 
+  mutate(entry = as.logical(entry))
+
+```
+
+This dataset contains information on each entry and exit to and from the NYC Transit subway system. I have narrowed the dataset to only include the variables `r names(transit_df)`. The dataset now includes `r nrow(transit_df)` rows and `r ncol(transit_df)` columns. I have cleaned the names to snake case and have changed the variable 'entry' from a character vector to a logical vector. These data are not yet tidy, since the route1-route11 column names contain information that should be listed in rows. 
+
+Answer questions about the dataset. 
+
+```{r}
+distinct(transit_df, line, station_name)
+
+filter(transit_df, ada == TRUE) %>% 
+  distinct(line, station_name) %>% 
+  count()
+
+filter(transit_df, vending =='NO' & entry == TRUE) %>% 
+  count()
+
+filter(transit_df, vending == 'NO') %>% 
+  count()
+```
+
+There are `r count(distinct(transit_df, line, station_name))` distinct stations. `r filter(transit_df, ada == TRUE) %>% distinct(line, station_name) %>% count()` stations are ADA compliant. Out of `r filter(transit_df, vending == 'NO') %>% count()` stations without vending, `r filter(transit_df, vending =='NO' & entry == TRUE) %>% count()` stations allow entry (`r round(filter(transit_df, vending =='NO' & entry == TRUE) %>% count()/filter(transit_df, vending == 'NO') %>% count(), 3)`). 
+
+Create a tidy form of the route names and route numbers. 
+
+```{r}
+transit_tidy =
+  transit_df %>%
+  mutate_at(vars(route1:route11), as.character) %>%
+  pivot_longer(
+    route1:route11,
+    names_to = "route_name",
+    names_prefix = "route",
+    values_to = "route_number") %>%
+  drop_na(route_number)
+```
+
+Answering questions about the distinct stations.
+
+```{r}
+filter(transit_tidy, route_number == "A") %>% 
+  distinct(line, station_name) %>% 
+  count()
+
+filter(transit_tidy, route_number == "A" & ada == TRUE) %>% 
+  distinct(line, station_name) %>% 
+  count()
+```
+
+`r filter(transit_tidy, route_number == "A") %>% distinct(line, station_name) %>% count()` distinct stations serve the A. Of these, `r filter(transit_tidy, route_number == "A" & ada == TRUE) %>% distinct(line, station_name) %>% count()` are ADA compliant.
+
+
+## Problem 3
+
+Cleaning the data in pols-month.csv. 
+
+```{r}
+pols_df = 
+  read_csv("./data/pols-month.csv") %>% 
+  janitor::clean_names() %>% 
+  separate(mon, into = c("year", "month", "day"), sep = "-") %>% 
+  mutate(year = as.integer(year)) %>% 
+  mutate(month = as.integer(month)) %>% 
+  mutate(day = as.integer(day)) 
+
+month_df = 
+  tibble(
+    month = 1:12,
+    month_name = month.name) %>% 
+  mutate(month = as.integer(month))
+  
+pols_df = 
+  left_join(pols_df, month_df, by = "month")
+
+pols_df = relocate(pols_df, prez_dem, .after = prez_gop)
+  
+pols_tidy =
+  pivot_longer(
+    pols_df,
+    prez_gop:prez_dem,
+    names_to = "president",
+    values_to = "president_value") %>% 
+  mutate(president = recode(president, prez_gop = "gop", prez_dem = "dem"))
+
+select(pols_df, -day, -prez_dem, -prez_gop)
+```
+
+Cleaning data in snp.csv. 
+
+```{r}
+snp_df = 
+  read.csv("./data/snp.csv") %>% 
+  separate(date, into = c("month", "day", "year"), sep = "/") %>% 
+  mutate(year = as.integer(year)) %>% 
+  mutate(month = as.integer(month)) %>% 
+  mutate(day = as.integer(day)) 
+
+snp_df = 
+  left_join(snp_df, month_df, by = "month")
+
+snp_df = relocate(snp_df, year, .before = month)
+
+```
+
+Tidy the unemployment data. 
+
+```{r}
+unemployment_df = 
+  read.csv("./data/unemployment.csv") 
+
+unemploy_tidy = 
+  pivot_longer(
+    unemployment_df,
+    Jan:Dec,
+    names_to = "month_name",
+    values_to = "percent") %>% 
+  mutate(month_name = month.name[as.factor(month_name)]) %>% 
+  mutate(month_name = recode(month_name, January = "1", February = "2", March = "3", April = "4", May = "5", June = "6", July = "7", August = "8", September = "9", October = "10", November = "11", December = "12")) %>% 
+  mutate(month_name = as.integer(month_name)) %>%
+  rename("month" = "month_name") %>% 
+  rename("year" = "Year")
+
+```
+
+Join datasets.
+
+```{r}
+Combine_df = 
+  left_join(pols_tidy, snp_df, by = "month", "year")
+
+final_df = 
+  left_join(Combine_df, unemploy_tidy, by = "month", "year") 
+```
+
+This final dataset was created by merging data from pols-month.csv, which contains data on the number of national politicians by party over time, snp.csv, which contains data on the Standard & Poor's stock market index, and unemployment.csv, which contains data on percent unemployment by month over time. The final dataset has `r nrow(final_df)` rows and `r ncol(final_df)` columns. The years included are between `r range(pull(final_df, year.x))`. Variables in the set are: `r names(final_df)`. 
